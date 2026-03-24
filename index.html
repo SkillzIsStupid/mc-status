@@ -1,82 +1,159 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Cut in the Butt SMP</title>
+  <title>Minecraft Server Status</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
     body {
       font-family: Arial;
-      background: #0f172a;
+      background: #0b1220;
       color: white;
-      text-align: center;
-      padding: 40px;
+      margin: 0;
+    }
+
+    .header {
+      background: #111827;
+      padding: 20px;
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    .container {
+      padding: 30px;
     }
 
     .card {
-      background: #1e293b;
-      padding: 30px;
-      border-radius: 12px;
-      display: inline-block;
-      min-width: 300px;
+      background: #1f2937;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
     }
 
-    .online { color: #22c55e; }
-    .offline { color: #ef4444; }
+    .status-online { color: #22c55e; }
+    .status-offline { color: #ef4444; }
+
+    .players {
+      font-size: 20px;
+      margin-top: 10px;
+    }
 
     ul {
-      list-style: none;
       padding: 0;
+      list-style: none;
     }
 
     li {
-      background: #334155;
-      margin: 5px;
+      background: #374151;
+      margin: 5px 0;
       padding: 8px;
       border-radius: 6px;
     }
+
+    canvas {
+      background: #111827;
+      border-radius: 10px;
+      padding: 10px;
+    }
   </style>
 </head>
+
 <body>
 
-  <h1>🎮 Minecraft Server</h1>
+  <div class="header">🎮 Minecraft Server Status</div>
 
-  <div class="card">
-    <h2 id="status">Checking...</h2>
-    <p id="players"></p>
-    <ul id="list"></ul>
+  <div class="container">
+
+    <div class="card">
+      <h2 id="status">Checking...</h2>
+      <div class="players" id="players"></div>
+      <p>IP:score-complexity.gl.joinmc.link</p>
+    </div>
+
+    <div class="card">
+      <h3>Online Players</h3>
+      <ul id="list"></ul>
+    </div>
+
+    <div class="card">
+      <h3>Server Activity</h3>
+      <canvas id="chart"></canvas>
+    </div>
+
   </div>
 
-  <script>
-    async function update() {
-      const res = await fetch("/api");
-      const data = await res.json();
+<script>
+let historyData = [];
 
-      const statusEl = document.getElementById("status");
-      const playersEl = document.getElementById("players");
-      const listEl = document.getElementById("list");
+const ctx = document.getElementById('chart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      label: 'Players Online',
+      data: [],
+      borderColor: '#22c55e',
+      tension: 0.3
+    }]
+  },
+  options: {
+    scales: {
+      y: { beginAtZero: true }
+    }
+  }
+});
 
-      if (data.online) {
-        statusEl.innerText = "🟢 ONLINE";
-        statusEl.className = "online";
-        playersEl.innerText = `${data.players}/${data.max}`;
+async function update() {
+  try {
+    const res = await fetch("/api");
+    const data = await res.json();
 
-        listEl.innerHTML = "";
-        data.names.forEach(p => {
-          let li = document.createElement("li");
-          li.innerText = p;
-          listEl.appendChild(li);
-        });
+    const statusEl = document.getElementById("status");
+    const playersEl = document.getElementById("players");
+    const listEl = document.getElementById("list");
 
-      } else {
-        statusEl.innerText = "🔴 OFFLINE";
-        statusEl.className = "offline";
-        playersEl.innerText = "";
-        listEl.innerHTML = "";
+    if (data.online) {
+      statusEl.innerText = "🟢 ONLINE";
+      statusEl.className = "status-online";
+
+      playersEl.innerText = `${data.players}/${data.max}`;
+
+      listEl.innerHTML = "";
+      data.names.forEach(p => {
+        let li = document.createElement("li");
+        li.innerText = p;
+        listEl.appendChild(li);
+      });
+
+      // Add to graph
+      const time = new Date().toLocaleTimeString();
+      chart.data.labels.push(time);
+      chart.data.datasets[0].data.push(data.players);
+
+      if (chart.data.labels.length > 20) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
       }
+
+      chart.update();
+
+    } else {
+      statusEl.innerText = "🔴 OFFLINE";
+      statusEl.className = "status-offline";
+      playersEl.innerText = "";
+      listEl.innerHTML = "";
     }
 
-    setInterval(update, 5000);
-    update();
-  </script>
+  } catch {
+    document.getElementById("status").innerText = "ERROR";
+  }
+}
+
+setInterval(update, 5000);
+update();
+</script>
 
 </body>
 </html>
