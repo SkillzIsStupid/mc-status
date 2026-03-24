@@ -1,28 +1,82 @@
-from flask import Flask, jsonify, send_from_directory
-from mcstatus import JavaServer
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Minecraft Server Status</title>
+  <style>
+    body {
+      font-family: Arial;
+      background: #0f172a;
+      color: white;
+      text-align: center;
+      padding: 40px;
+    }
 
-app = Flask(__name__)
+    .card {
+      background: #1e293b;
+      padding: 30px;
+      border-radius: 12px;
+      display: inline-block;
+      min-width: 300px;
+    }
 
-SERVER = "your-playit-address.playit.gg"
-PORT = 25565
+    .online { color: #22c55e; }
+    .offline { color: #ef4444; }
 
-@app.route("/api")
-def api():
-    try:
-        server = JavaServer.lookup(f"{SERVER}:{PORT}")
-        status = server.status()
+    ul {
+      list-style: none;
+      padding: 0;
+    }
 
-        return jsonify({
-            "online": True,
-            "players": status.players.online,
-            "max": status.players.max,
-            "names": [p.name for p in status.players.sample] if status.players.sample else []
-        })
-    except:
-        return jsonify({"online": False})
+    li {
+      background: #334155;
+      margin: 5px;
+      padding: 8px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
 
-@app.route("/")
-def home():
-    return send_from_directory(".", "index.html")
+  <h1>🎮 Minecraft Server</h1>
 
-app.run(host="0.0.0.0", port=3000)
+  <div class="card">
+    <h2 id="status">Checking...</h2>
+    <p id="players"></p>
+    <ul id="list"></ul>
+  </div>
+
+  <script>
+    async function update() {
+      const res = await fetch("/api");
+      const data = await res.json();
+
+      const statusEl = document.getElementById("status");
+      const playersEl = document.getElementById("players");
+      const listEl = document.getElementById("list");
+
+      if (data.online) {
+        statusEl.innerText = "🟢 ONLINE";
+        statusEl.className = "online";
+        playersEl.innerText = `${data.players}/${data.max}`;
+
+        listEl.innerHTML = "";
+        data.names.forEach(p => {
+          let li = document.createElement("li");
+          li.innerText = p;
+          listEl.appendChild(li);
+        });
+
+      } else {
+        statusEl.innerText = "🔴 OFFLINE";
+        statusEl.className = "offline";
+        playersEl.innerText = "";
+        listEl.innerHTML = "";
+      }
+    }
+
+    setInterval(update, 5000);
+    update();
+  </script>
+
+</body>
+</html>
