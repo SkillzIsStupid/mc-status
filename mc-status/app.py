@@ -25,4 +25,5 @@ def api():
 def home():
     return send_from_directory(".", "index.html")
 
-app.run(host="0.0.0.0", port=3000)
+import os
+app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
