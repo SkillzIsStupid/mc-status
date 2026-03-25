@@ -45,9 +45,9 @@ async def on_ready():
     await tree.sync()
     client.loop.create_task(monitor())
 
-
+STATUS_MESSAGE_ID = None  # will auto-create if None
 async def monitor():
-    global last_status, status_message
+    global last_status, STATUS_MESSAGE_ID
 
     await client.wait_until_ready()
 
@@ -73,18 +73,25 @@ async def monitor():
 
                     embed = build_embed(current_status, players, max_players, names)
 
-                    # 🔹 Create or update static message
-                    if status_message is None:
-                        status_message = await channel.send(embed=embed)
-                    else:
-                        try:
-                            await status_message.edit(embed=embed)
-                        except:
-                            status_message = await channel.send(embed=embed)
+                    try:
+                        # 🔹 Try editing existing message
+                        if STATUS_MESSAGE_ID:
+                            msg = await channel.fetch_message(STATUS_MESSAGE_ID)
+                            await msg.edit(embed=embed)
+                        else:
+                            raise Exception("No message yet")
 
-                    # 🔴 Ping only when going DOWN
+                    except:
+                        # 🔹 Create new message if not found
+                        msg = await channel.send(embed=embed)
+                        STATUS_MESSAGE_ID = msg.id
+
+                    # 🔴 Alert only on DOWN
                     if last_status is True and current_status is False:
-                        await channel.send("@everyone 🔴 SERVER DOWN!")
+                        await channel.send(
+                            "@everyone 🔴 SERVER DOWN!",
+                            allowed_mentions=discord.AllowedMentions(everyone=True)
+                        )
 
         last_status = current_status
         await asyncio.sleep(10)
