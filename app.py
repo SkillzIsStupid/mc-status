@@ -51,14 +51,21 @@ async def on_ready():
 async def setup(interaction: discord.Interaction):
     global status_message_id, status_channel_id
 
-    channel = interaction.channel
+    # ✅ respond immediately (fixes timeout)
+    await interaction.response.defer(ephemeral=True)
 
-    msg = await channel.send("🔄 Initializing status...")
+    try:
+        channel = interaction.channel
 
-    status_message_id = msg.id
-    status_channel_id = channel.id
+        msg = await channel.send("🔄 Initializing status...")
 
-    await interaction.response.send_message("✅ Downdetector setup complete!", ephemeral=True)
+        status_message_id = msg.id
+        status_channel_id = channel.id
+
+        await interaction.followup.send("✅ Downdetector setup complete!", ephemeral=True)
+
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
 
 
 # 🔹 Monitor loop
@@ -136,8 +143,10 @@ async def status_cmd(interaction: discord.Interaction):
 @app_commands.describe(message="Maintenance message")
 async def maintenance(interaction: discord.Interaction, message: str):
 
+    await interaction.response.defer(ephemeral=True)
+
     if not any(role.name == ALLOWED_ROLE for role in interaction.user.roles):
-        await interaction.response.send_message("❌ No permission", ephemeral=True)
+        await interaction.followup.send("❌ No permission", ephemeral=True)
         return
 
     embed = discord.Embed(
@@ -146,7 +155,7 @@ async def maintenance(interaction: discord.Interaction, message: str):
         color=0xf59e0b
     )
 
-    await interaction.response.send_message("✅ Announcement sent", ephemeral=True)
+    await interaction.followup.send("✅ Announcement sent", ephemeral=True)
 
     channel = interaction.channel
 
