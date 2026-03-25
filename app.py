@@ -6,7 +6,7 @@ import os
 
 TOKEN = os.getenv("TOKEN")
 
-SERVER = "your-playit-address.playit.gg"
+SERVER = "score-complexity.gl.joinmc.link"
 PORT = 25565
 
 CHANNEL_NAME = "downdetector"
