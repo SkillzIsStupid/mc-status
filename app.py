@@ -10,16 +10,17 @@ SERVER = "score-complexity.gl.joinmc.link"
 PORT = 25565
 
 CHANNEL_NAME = "downdetector"
+ALLOWED_ROLE = "Admin"  # change this
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
 last_status = None
-cooldown = False
+status_message = None
 
 
-# 🔹 Fancy embed builder
+# 🔹 Embed builder
 def build_embed(online, players=0, max_players=0, names=[]):
     if online:
         embed = discord.Embed(
@@ -46,7 +47,7 @@ async def on_ready():
 
 
 async def monitor():
-    global last_status, cooldown
+    global last_status, status_message
 
     await client.wait_until_ready()
 
@@ -66,32 +67,31 @@ async def monitor():
             max_players = 0
             names = []
 
-        if last_status is None:
-            last_status = current_status
+        for guild in client.guilds:
+            for channel in guild.text_channels:
+                if channel.name == CHANNEL_NAME:
 
-        if current_status != last_status and not cooldown:
-            for guild in client.guilds:
-                for channel in guild.text_channels:
-                    if channel.name == CHANNEL_NAME:
-                        embed = build_embed(current_status, players, max_players, names)
+                    embed = build_embed(current_status, players, max_players, names)
 
-                        if current_status:
-                            await channel.send("@everyone", embed=embed)
-                        else:
-                            await channel.send("@everyone", embed=embed)
+                    # 🔹 Create or update static message
+                    if status_message is None:
+                        status_message = await channel.send(embed=embed)
+                    else:
+                        try:
+                            await status_message.edit(embed=embed)
+                        except:
+                            status_message = await channel.send(embed=embed)
 
-            last_status = current_status
-            cooldown = True
+                    # 🔴 Ping only when going DOWN
+                    if last_status is True and current_status is False:
+                        await channel.send("@everyone 🔴 SERVER DOWN!")
 
-            # prevent spam
-            await asyncio.sleep(60)
-            cooldown = False
-
-        await asyncio.sleep(15)
+        last_status = current_status
+        await asyncio.sleep(10)
 
 
 # 🔹 Slash command: /status
-@tree.command(name="status", description="Check Minecraft server status")
+@tree.command(name="status", description="Check server status")
 async def status_cmd(interaction: discord.Interaction):
     try:
         server = JavaServer.lookup(f"{SERVER}:{PORT}")
@@ -102,27 +102,31 @@ async def status_cmd(interaction: discord.Interaction):
         names = [p.name for p in status.players.sample] if status.players.sample else []
 
         embed = build_embed(True, players, max_players, names)
-
     except:
         embed = build_embed(False)
 
     await interaction.response.send_message(embed=embed)
 
 
-# 🔹 Slash command: /maintenance
+# 🔹 Slash command: /maintenance (role restricted)
 @tree.command(name="maintenance", description="Send maintenance announcement")
 @app_commands.describe(message="Maintenance message")
 async def maintenance(interaction: discord.Interaction, message: str):
 
+    # 🔒 Role check
+    roles = [role.name for role in interaction.user.roles]
+
+    if ALLOWED_ROLE not in roles:
+        await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+        return
+
     embed = discord.Embed(
-        title="🛠️ Maintenance Announcement",
+        title="🛠️ Maintenance",
         description=message,
         color=0xf59e0b
     )
 
-    embed.set_footer(text="Server Team")
-
-    await interaction.response.send_message("Announcement sent!", ephemeral=True)
+    await interaction.response.send_message("✅ Announcement sent", ephemeral=True)
 
     for guild in client.guilds:
         for channel in guild.text_channels:
