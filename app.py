@@ -9,15 +9,15 @@ TOKEN = os.getenv("TOKEN")
 SERVER = "score-complexity.gl.joinmc.link"
 PORT = 25565
 
-CHANNEL_NAME = "downdetector"
-ALLOWED_ROLE = "Admin"  # change this
+ALLOWED_ROLE = "Admin"
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
+status_message_id = None
+status_channel_id = None
 last_status = None
-status_message = None
 
 
 # 🔹 Embed builder
@@ -33,19 +33,50 @@ def build_embed(online, players=0, max_players=0, names=[]):
     else:
         embed = discord.Embed(
             title="🔴 Server Offline",
-            description="Server is currently unreachable",
+            description="Server unreachable",
             color=0xef4444
         )
     return embed
 
 
 @client.event
+async def on_ready():
+    print(f"Logged in as {client.user}")
+    await tree.sync()
+    client.loop.create_task(monitor())
+
+
+# 🔹 Setup command
+@tree.command(name="setup", description="Setup downdetector in this channel")
+async def setup(interaction: discord.Interaction):
+    global status_message_id, status_channel_id
+
+    channel = interaction.channel
+
+    msg = await channel.send("🔄 Initializing status...")
+
+    status_message_id = msg.id
+    status_channel_id = channel.id
+
+    await interaction.response.send_message("✅ Downdetector setup complete!", ephemeral=True)
+
+
+# 🔹 Monitor loop
 async def monitor():
-    global last_status
+    global status_message_id, status_channel_id, last_status
 
     await client.wait_until_ready()
 
     while True:
+        if not status_channel_id:
+            await asyncio.sleep(5)
+            continue
+
+        channel = client.get_channel(status_channel_id)
+        if not channel:
+            await asyncio.sleep(5)
+            continue
+
         try:
             server = JavaServer.lookup(f"{SERVER}:{PORT}")
             status = server.status()
@@ -61,37 +92,28 @@ async def monitor():
             max_players = 0
             names = []
 
-        for guild in client.guilds:
-            channel = discord.utils.get(guild.text_channels, name=CHANNEL_NAME)
-            if not channel:
-                continue
+        embed = build_embed(current_status, players, max_players, names)
 
-            embed = build_embed(current_status, players, max_players, names)
+        try:
+            msg = await channel.fetch_message(status_message_id)
+            await msg.edit(embed=embed)
 
-            # 🔥 FIND EXISTING BOT MESSAGE
-            msg = None
-            async for m in channel.history(limit=20):
-                if m.author == client.user:
-                    msg = m
-                    break
+        except:
+            msg = await channel.send(embed=embed)
+            status_message_id = msg.id
 
-            if msg:
-                await msg.edit(embed=embed)
-            else:
-                await channel.send(embed=embed)
-
-            # 🔴 alert only on DOWN
-            if last_status is True and current_status is False:
-                await channel.send(
-                    "@everyone 🔴 SERVER DOWN!",
-                    allowed_mentions=discord.AllowedMentions(everyone=True)
-                )
+        # 🔴 Alert only when going DOWN
+        if last_status is True and current_status is False:
+            await channel.send(
+                "@everyone 🔴 SERVER DOWN!",
+                allowed_mentions=discord.AllowedMentions(everyone=True)
+            )
 
         last_status = current_status
         await asyncio.sleep(10)
 
 
-# 🔹 Slash command: /status
+# 🔹 /status command
 @tree.command(name="status", description="Check server status")
 async def status_cmd(interaction: discord.Interaction):
     try:
@@ -109,16 +131,13 @@ async def status_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
-# 🔹 Slash command: /maintenance (role restricted)
+# 🔹 /maintenance command
 @tree.command(name="maintenance", description="Send maintenance announcement")
 @app_commands.describe(message="Maintenance message")
 async def maintenance(interaction: discord.Interaction, message: str):
 
-    # 🔒 Role check
-    roles = [role.name for role in interaction.user.roles]
-
-    if ALLOWED_ROLE not in roles:
-        await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+    if not any(role.name == ALLOWED_ROLE for role in interaction.user.roles):
+        await interaction.response.send_message("❌ No permission", ephemeral=True)
         return
 
     embed = discord.Embed(
@@ -129,10 +148,13 @@ async def maintenance(interaction: discord.Interaction, message: str):
 
     await interaction.response.send_message("✅ Announcement sent", ephemeral=True)
 
-    for guild in client.guilds:
-        for channel in guild.text_channels:
-            if channel.name == CHANNEL_NAME:
-                await channel.send("@everyone", embed=embed)
+    channel = interaction.channel
+
+    await channel.send(
+        "@everyone",
+        embed=embed,
+        allowed_mentions=discord.AllowedMentions(everyone=True)
+    )
 
 
 client.run(TOKEN)
