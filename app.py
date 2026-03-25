@@ -40,14 +40,8 @@ def build_embed(online, players=0, max_players=0, names=[]):
 
 
 @client.event
-async def on_ready():
-    print(f"Logged in as {client.user}")
-    await tree.sync()
-    client.loop.create_task(monitor())
-
-STATUS_MESSAGE_ID = None  # will auto-create if None
 async def monitor():
-    global last_status, STATUS_MESSAGE_ID
+    global last_status
 
     await client.wait_until_ready()
 
@@ -55,8 +49,8 @@ async def monitor():
         try:
             server = JavaServer.lookup(f"{SERVER}:{PORT}")
             status = server.status()
-            current_status = True
 
+            current_status = True
             players = status.players.online
             max_players = status.players.max
             names = [p.name for p in status.players.sample] if status.players.sample else []
@@ -68,30 +62,30 @@ async def monitor():
             names = []
 
         for guild in client.guilds:
-            for channel in guild.text_channels:
-                if channel.name == CHANNEL_NAME:
+            channel = discord.utils.get(guild.text_channels, name=CHANNEL_NAME)
+            if not channel:
+                continue
 
-                    embed = build_embed(current_status, players, max_players, names)
+            embed = build_embed(current_status, players, max_players, names)
 
-                    try:
-                        # 🔹 Try editing existing message
-                        if STATUS_MESSAGE_ID:
-                            msg = await channel.fetch_message(STATUS_MESSAGE_ID)
-                            await msg.edit(embed=embed)
-                        else:
-                            raise Exception("No message yet")
+            # 🔥 FIND EXISTING BOT MESSAGE
+            msg = None
+            async for m in channel.history(limit=20):
+                if m.author == client.user:
+                    msg = m
+                    break
 
-                    except:
-                        # 🔹 Create new message if not found
-                        msg = await channel.send(embed=embed)
-                        STATUS_MESSAGE_ID = msg.id
+            if msg:
+                await msg.edit(embed=embed)
+            else:
+                await channel.send(embed=embed)
 
-                    # 🔴 Alert only on DOWN
-                    if last_status is True and current_status is False:
-                        await channel.send(
-                            "@everyone 🔴 SERVER DOWN!",
-                            allowed_mentions=discord.AllowedMentions(everyone=True)
-                        )
+            # 🔴 alert only on DOWN
+            if last_status is True and current_status is False:
+                await channel.send(
+                    "@everyone 🔴 SERVER DOWN!",
+                    allowed_mentions=discord.AllowedMentions(everyone=True)
+                )
 
         last_status = current_status
         await asyncio.sleep(10)
